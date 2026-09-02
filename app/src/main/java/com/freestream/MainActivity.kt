@@ -28,11 +28,15 @@ class MainActivity : ComponentActivity() {
         setContent {
             FreeStreamTheme {
                 var apiBaseUrl by remember { mutableStateOf(repository.getApiBaseUrl(defaultApiUrl)) }
-                val streamResolver = remember(apiBaseUrl) { StreamResolver(apiBaseUrl) }
+                val streamResolver = remember(apiBaseUrl) {
+                    StreamResolver(remoteBaseUrl = apiBaseUrl.ifBlank { null })
+                }
                 var showSettings by remember { mutableStateOf(false) }
 
                 Surface(modifier = Modifier.fillMaxSize()) {
                     var selectedItem by remember { mutableStateOf<MediaItem?>(null) }
+                    var selectedSeason by remember { mutableIntStateOf(1) }
+                    var selectedEpisode by remember { mutableIntStateOf(1) }
                     var pendingTagFilter by remember { mutableStateOf<String?>(null) }
                     var removeOverlayVisible by remember { mutableStateOf(false) }
 
@@ -42,9 +46,11 @@ class MainActivity : ComponentActivity() {
 
                     HomeScreen(
                         repository = repository,
-                        onSelectMedia = { item ->
+                        onSelectMedia = { item, season, episode ->
                             if (!removeOverlayVisible) {
                                 selectedItem = item
+                                selectedSeason = season ?: 1
+                                selectedEpisode = episode ?: 1
                             }
                         },
                         externalAddTag = pendingTagFilter,
@@ -63,6 +69,8 @@ class MainActivity : ComponentActivity() {
                                     selectedItem = null
                                     pendingTagFilter = tag
                                 },
+                                initialSeason = selectedSeason,
+                                initialEpisode = selectedEpisode,
                             )
                         }
                     }

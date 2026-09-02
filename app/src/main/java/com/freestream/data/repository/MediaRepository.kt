@@ -14,8 +14,10 @@ class MediaRepository(context: Context) {
     private val historyDao = WatchHistoryDatabase.getInstance(appContext).watchHistoryDao()
     private val prefs = appContext.getSharedPreferences("freestream_prefs", Context.MODE_PRIVATE)
 
+    suspend fun getMediaByTitle(title: String): MediaItem? = catalog.getMediaByTitle(title)
+
     fun getApiBaseUrl(defaultUrl: String): String =
-        prefs.getString("api_base_url", defaultUrl)?.trim().orEmpty().ifBlank { defaultUrl }
+        prefs.getString("api_base_url", null)?.trim().orEmpty().ifBlank { defaultUrl.trim() }
 
     fun setApiBaseUrl(url: String) {
         prefs.edit().putString("api_base_url", url.trim()).apply()

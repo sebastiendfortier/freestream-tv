@@ -41,7 +41,7 @@ fun SettingsDialog(
             ) {
                 Text("Settings", fontSize = 22.sp, color = Color.White)
                 Text(
-                    "API base URL (FreeStream database server)",
+                    "Optional: remote resolver URL (leave blank for on-device playback)",
                     color = Color(0xFFAAAAAA),
                     fontSize = 14.sp,
                 )

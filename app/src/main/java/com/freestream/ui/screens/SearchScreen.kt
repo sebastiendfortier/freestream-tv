@@ -37,7 +37,7 @@ fun SearchScreen(
     repository: MediaRepository,
     initialQuery: String = "",
     onBack: () -> Unit,
-    onSelectMedia: (MediaItem) -> Unit
+    onSelectMedia: (MediaItem, Int?, Int?) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     var rawInputText by remember { mutableStateOf(initialQuery) }
@@ -211,7 +211,7 @@ fun SearchScreen(
                 items(searchResults) { item ->
                     MediaCard(
                         item = item,
-                        onClick = { onSelectMedia(item) }
+                        onClick = { onSelectMedia(item, null, null) }
                     )
                 }
             }

@@ -1,0 +1,101 @@
+package com.freestream.resolver
+
+import com.freestream.data.model.ResolvedStream
+import okhttp3.FormBody
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.net.URLEncoder
+
+internal class WootlyResolver(
+    private val client: OkHttpClient,
+) {
+    private val ua =
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+    fun resolve(url: String): ResolvedStream? {
+        val webUrl = normalizeUrl(url)
+        val pageReq = Request.Builder().url(webUrl).header("User-Agent", ua).get().build()
+        val pageBody = client.newCall(pageReq).execute().use { it.body?.string().orEmpty() }
+        val iframe = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(pageBody)?.groupValues?.get(1) ?: return null
+        val embedUrl = if (iframe.startsWith("//")) "https:$iframe" else iframe
+        val embedHost = embedUrl.toHttpUrlOrNull()?.host ?: "web.wootly.ch"
+        val postReq = Request.Builder()
+            .url(embedUrl)
+            .header("User-Agent", ua)
+            .header("Referer", webUrl)
+            .header("Origin", "https://$embedHost")
+            .post(FormBody.Builder().add("qdfx", "1").build())
+            .build()
+        val postBody = client.newCall(postReq).execute().use { it.body?.string().orEmpty() }
+        val tk = Regex("""tk\s*=\s*["']([^"']+)""").find(postBody)?.groupValues?.get(1) ?: return null
+        val vd = Regex("""vd\s*=\s*["']([^"']+)""").find(postBody)?.groupValues?.get(1) ?: return null
+        val grabBase = embedUrl.substringBeforeLast("/") + "/grabm"
+        val grabUrl = "$grabBase?t=${enc(tk)}&id=${enc(vd)}"
+        val grabBody = client.newCall(
+            Request.Builder().url(grabUrl).header("User-Agent", ua).header("Referer", webUrl).get().build(),
+        ).execute().use { it.body?.string().orEmpty().trim() }
+        if (!grabBody.startsWith("http")) return null
+        val streamUrl = followToMedia(grabBody) ?: return null
+        return ResolvedStream(
+            streamUrl = streamUrl,
+            quality = "HD",
+            headers = mapOf(
+                "User-Agent" to ua,
+                "Referer" to "https://web.wootly.ch/",
+                "Origin" to "https://web.wootly.ch",
+            ),
+            sourceUrl = webUrl,
+            contentType = if (streamUrl.contains(".m3u8")) "application/vnd.apple.mpegurl" else "video/mp4",
+        )
+    }
+
+    private fun followToMedia(startUrl: String): String? {
+        var current = startUrl.trim()
+        repeat(10) {
+            if (current.contains(".mp4") || current.contains(".m3u8")) return current
+            val req = Request.Builder()
+                .url(current)
+                .header("User-Agent", ua)
+                .header("Referer", "https://www.wootly.ch/")
+                .get()
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (resp.code in 300..399) {
+                    val loc = resp.header("Location") ?: return null
+                    current = when {
+                        loc.startsWith("//") -> "https:$loc"
+                        loc.startsWith("/") -> current.substringBefore("://").let { scheme ->
+                            val host = current.substringAfter("://").substringBefore("/")
+                            "$scheme://$host$loc"
+                        }
+                        else -> loc
+                    }
+                    return@repeat
+                }
+                val body = resp.body?.string().orEmpty().trim()
+                if (body.startsWith("http")) {
+                    current = body.lineSequence().first()
+                    return@repeat
+                }
+                if (body.contains(".mp4") || body.contains(".m3u8")) {
+                    return body.lineSequence().first { it.contains(".mp4") || it.contains(".m3u8") }
+                }
+            }
+            return null
+        }
+        return if (current.contains(".mp4") || current.contains(".m3u8")) current else null
+    }
+
+    private fun enc(value: String): String = URLEncoder.encode(value, Charsets.UTF_8.name())
+
+    companion object {
+        fun normalizeUrl(url: String): String {
+            var out = url.replace("web.wootly.ch", "www.wootly.ch")
+            val m = Regex("""^https?://web\.wootly\.ch/e/.*/([^/]+)$""").find(out)
+            if (m != null) out = "https://www.wootly.ch/?v=${m.groupValues[1]}"
+            return out
+        }
+    }
+}

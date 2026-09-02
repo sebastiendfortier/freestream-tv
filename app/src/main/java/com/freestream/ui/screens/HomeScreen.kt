@@ -214,7 +214,7 @@ fun ActiveFilterPill(
 @Composable
 fun HomeScreen(
     repository: MediaRepository,
-    onSelectMedia: (MediaItem) -> Unit,
+    onSelectMedia: (MediaItem, Int?, Int?) -> Unit,
     externalAddTag: String? = null,
     onClearExternalTag: () -> Unit = {},
     onRemoveOverlayVisible: (Boolean) -> Unit = {},
@@ -513,14 +513,19 @@ fun HomeScreen(
                         progressPercent = progressPercent,
                         isInputBlocked = ::isContinueWatchingInputBlocked,
                         onOpenMedia = {
-                            onSelectMedia(
-                                MediaItem(
-                                    title = item.seriesTitle,
-                                    type = "TV",
-                                    picture = item.posterUrl,
-                                    synopsis = ""
+                            coroutineScope.launch {
+                                val catalogItem = repository.getMediaByTitle(item.seriesTitle)
+                                    ?: MediaItem(
+                                        title = item.seriesTitle,
+                                        type = "TV",
+                                        picture = item.posterUrl,
+                                    )
+                                onSelectMedia(
+                                    catalogItem,
+                                    item.seasonNumber.toIntOrNull(),
+                                    item.episodeNumber.toIntOrNull(),
                                 )
-                            )
+                            }
                         },
                         onOpenRemoveOverlay = { openRemoveOverlay(item) }
                     )
@@ -565,7 +570,7 @@ fun HomeScreen(
 
                     MediaCard(
                         item = item,
-                        onClick = { onSelectMedia(item) }
+                        onClick = { onSelectMedia(item, null, null) }
                     )
                 }
 
