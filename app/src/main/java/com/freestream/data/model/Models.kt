@@ -6,6 +6,7 @@ import kotlinx.serialization.Serializable
 data class AnimeItem(
     val title: String,
     val malId: Int? = null,
+    val imdbId: String = "",
     val titleRomaji: String = "",
     val titleJapanese: String = "",
     val airingStatus: String = "aired",

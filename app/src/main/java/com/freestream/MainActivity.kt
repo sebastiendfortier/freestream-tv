@@ -10,8 +10,9 @@ import androidx.compose.ui.Modifier
 import androidx.tv.material3.Surface
 import com.freestream.data.model.AnimeItem
 import com.freestream.data.repository.AnimeRepository
-import com.freestream.ui.screens.EpisodeDialog
+import com.freestream.resolver.StreamResolver
 import com.freestream.ui.screens.HomeScreen
+import com.freestream.ui.screens.MediaPlayDialog
 import com.freestream.ui.theme.AnimeTVTheme
 
 class MainActivity : ComponentActivity() {
@@ -21,6 +22,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repository = AnimeRepository(applicationContext)
+        val apiBase = getString(R.string.api_base_url)
+        val streamResolver = StreamResolver(apiBase)
 
         setContent {
             AnimeTVTheme {
@@ -47,9 +50,9 @@ class MainActivity : ComponentActivity() {
 
                     if (!removeOverlayVisible) {
                         selectedAnime?.let { anime ->
-                            EpisodeDialog(
-                                anime = anime,
-                                repository = repository,
+                            MediaPlayDialog(
+                                item = anime,
+                                streamResolver = streamResolver,
                                 onDismiss = { selectedAnime = null },
                                 onSelectTag = { tag ->
                                     selectedAnime = null
