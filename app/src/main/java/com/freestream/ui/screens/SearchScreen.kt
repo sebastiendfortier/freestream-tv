@@ -22,9 +22,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material3.*
-import com.freestream.data.model.AnimeItem
-import com.freestream.data.repository.AnimeRepository
-import com.freestream.ui.components.AnimeCard
+import com.freestream.data.model.MediaItem
+import com.freestream.data.repository.MediaRepository
+import com.freestream.ui.components.MediaCard
 import com.freestream.ui.components.TvActionButton
 import com.freestream.ui.components.TvFilterChip
 import com.freestream.ui.theme.*
@@ -34,14 +34,14 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun SearchScreen(
-    repository: AnimeRepository,
+    repository: MediaRepository,
     initialQuery: String = "",
     onBack: () -> Unit,
-    onSelectAnime: (AnimeItem) -> Unit
+    onSelectMedia: (MediaItem) -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
     var rawInputText by remember { mutableStateOf(initialQuery) }
-    var searchResults by remember { mutableStateOf<List<AnimeItem>>(emptyList()) }
+    var searchResults by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var isSearching by remember { mutableStateOf(false) }
 
     fun executeSearch(query: String) {
@@ -49,7 +49,7 @@ fun SearchScreen(
         coroutineScope.launch {
             isSearching = true
             searchResults = if (q.isBlank()) {
-                repository.getPopularAnime(limit = 60)
+                repository.getFilteredMedia(limit = 60)
             } else {
                 repository.search(q)
             }
@@ -62,7 +62,7 @@ fun SearchScreen(
         val trimmed = rawInputText.trim()
         if (trimmed.isEmpty()) {
             isSearching = true
-            searchResults = repository.getPopularAnime(limit = 60)
+            searchResults = repository.getFilteredMedia(limit = 60)
             isSearching = false
         } else {
             delay(350) // 350ms debounce
@@ -109,7 +109,7 @@ fun SearchScreen(
                 contentAlignment = Alignment.CenterStart
             ) {
                 if (rawInputText.isEmpty()) {
-                    Text("Search anime title, genre, or keyword…", color = TextMuted, fontSize = 14.sp)
+                    Text("Search movies, TV, genre, or keyword…", color = TextMuted, fontSize = 14.sp)
                 }
                 BasicTextField(
                     value = rawInputText,
@@ -177,7 +177,7 @@ fun SearchScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = if (rawInputText.isBlank()) "Popular Anime Suggestions" else "Results for \"${rawInputText.trim()}\"",
+                text = if (rawInputText.isBlank()) "Popular Suggestions" else "Results for \"${rawInputText.trim()}\"",
                 color = TextWhite,
                 fontSize = 18.sp,
                 fontWeight = FontWeight.Bold
@@ -199,7 +199,7 @@ fun SearchScreen(
             }
         } else if (searchResults.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No matching anime found for '${rawInputText.trim()}'. Try another title or genre.", color = TextMuted, fontSize = 14.sp)
+                Text("No matching titles found for '${rawInputText.trim()}'. Try another title or genre.", color = TextMuted, fontSize = 14.sp)
             }
         } else {
             LazyVerticalGrid(
@@ -208,10 +208,10 @@ fun SearchScreen(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
                 modifier = Modifier.fillMaxSize()
             ) {
-                items(searchResults) { anime ->
-                    AnimeCard(
-                        anime = anime,
-                        onClick = { onSelectAnime(anime) }
+                items(searchResults) { item ->
+                    MediaCard(
+                        item = item,
+                        onClick = { onSelectMedia(item) }
                     )
                 }
             }

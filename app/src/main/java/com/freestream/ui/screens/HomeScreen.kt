@@ -28,9 +28,9 @@ import androidx.compose.ui.unit.sp
 import androidx.tv.material3.*
 import coil.compose.AsyncImage
 import com.freestream.data.db.WatchHistoryEntity
-import com.freestream.data.model.AnimeItem
-import com.freestream.data.repository.AnimeRepository
-import com.freestream.ui.components.AnimeCard
+import com.freestream.data.model.MediaItem
+import com.freestream.data.repository.MediaRepository
+import com.freestream.ui.components.MediaCard
 import com.freestream.ui.components.FilterDialog
 import com.freestream.ui.components.TagFilterMode
 import com.freestream.ui.components.TvActionButton
@@ -80,7 +80,7 @@ private fun ContinueWatchingShelfItem(
     item: WatchHistoryEntity,
     progressPercent: Float,
     isInputBlocked: () -> Boolean,
-    onOpenAnime: () -> Unit,
+    onOpenMedia: () -> Unit,
     onOpenRemoveOverlay: () -> Unit,
 ) {
     Row(
@@ -95,7 +95,7 @@ private fun ContinueWatchingShelfItem(
                 if (isInputBlocked()) {
                     return@Card
                 }
-                onOpenAnime()
+                onOpenMedia()
             },
             onLongClick = onOpenRemoveOverlay,
             shape = CardDefaults.shape(RoundedCornerShape(8.dp)),
@@ -213,11 +213,12 @@ fun ActiveFilterPill(
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    repository: AnimeRepository,
-    onSelectAnime: (AnimeItem) -> Unit,
+    repository: MediaRepository,
+    onSelectMedia: (MediaItem) -> Unit,
     externalAddTag: String? = null,
     onClearExternalTag: () -> Unit = {},
     onRemoveOverlayVisible: (Boolean) -> Unit = {},
+    onOpenSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -232,7 +233,7 @@ fun HomeScreen(
     var airingStatus by remember { mutableStateOf("ALL") }
     val tagModes = remember { mutableStateMapOf<String, TagFilterMode>() }
 
-    var animeList by remember { mutableStateOf<List<AnimeItem>>(emptyList()) }
+    var mediaList by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     var totalCount by remember { mutableStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
     var isLoadingMore by remember { mutableStateOf(false) }
@@ -260,7 +261,7 @@ fun HomeScreen(
             System.currentTimeMillis() < continueWatchingInputBlockedUntil
     }
 
-    // Handle tag clicked from EpisodeDialog
+    // Handle tag clicked from play dialog
     LaunchedEffect(externalAddTag) {
         if (!externalAddTag.isNullOrBlank()) {
             tagModes[externalAddTag] = TagFilterMode.INCLUDE
@@ -294,7 +295,7 @@ fun HomeScreen(
         )
         totalCount = count
 
-        val items = repository.getFilteredAnime(
+        val items = repository.getFilteredMedia(
             type = selectedType,
             minYear = minYear,
             minScore = minScore,
@@ -306,15 +307,15 @@ fun HomeScreen(
             limit = 60,
             offset = 0
         )
-        animeList = items
+        mediaList = items
         isLoading = false
     }
 
     fun loadMore() {
-        if (isLoadingMore || animeList.size >= totalCount) return
+        if (isLoadingMore || mediaList.size >= totalCount) return
         isLoadingMore = true
         coroutineScope.launch {
-            val nextItems = repository.getFilteredAnime(
+            val nextItems = repository.getFilteredMedia(
                 type = selectedType,
                 minYear = minYear,
                 minScore = minScore,
@@ -324,9 +325,9 @@ fun HomeScreen(
                 query = searchQuery,
                 sortBy = "score",
                 limit = 60,
-                offset = animeList.size
+                offset = mediaList.size
             )
-            animeList = animeList + nextItems
+            mediaList = mediaList + nextItems
             isLoadingMore = false
         }
     }
@@ -365,6 +366,13 @@ fun HomeScreen(
                     isPrimary = activeFilterCount > 0,
                     fontSize = 13.sp,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
+                )
+
+                TvActionButton(
+                    text = "⚙ Settings",
+                    onClick = onOpenSettings,
+                    fontSize = 13.sp,
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 )
 
                 Text(
@@ -504,9 +512,9 @@ fun HomeScreen(
                         item = item,
                         progressPercent = progressPercent,
                         isInputBlocked = ::isContinueWatchingInputBlocked,
-                        onOpenAnime = {
-                            onSelectAnime(
-                                AnimeItem(
+                        onOpenMedia = {
+                            onSelectMedia(
+                                MediaItem(
                                     title = item.seriesTitle,
                                     type = "TV",
                                     picture = item.posterUrl,
@@ -526,10 +534,10 @@ fun HomeScreen(
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Loading catalog…", color = TextMuted, fontSize = 16.sp)
             }
-        } else if (animeList.isEmpty()) {
+        } else if (mediaList.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("No anime found matching your filter criteria.", color = TextMuted, fontSize = 15.sp)
+                    Text("No titles found matching your filter criteria.", color = TextMuted, fontSize = 15.sp)
                     Spacer(modifier = Modifier.height(10.dp))
                     TvActionButton(
                         text = "Reset All Filters",
@@ -546,19 +554,18 @@ fun HomeScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 itemsIndexed(
-                    animeList,
-                    key = { _, anime -> anime.malId?.toString() ?: anime.title }
-                ) { index, anime ->
-                    // Infinite pagination: prefetch when user scrolls towards bottom
-                    if (index >= animeList.size - 18 && animeList.size < totalCount && !isLoadingMore) {
+                    mediaList,
+                    key = { _, item -> item.tmdbId?.toString() ?: item.title }
+                ) { index, item ->
+                    if (index >= mediaList.size - 18 && mediaList.size < totalCount && !isLoadingMore) {
                         LaunchedEffect(Unit) {
                             loadMore()
                         }
                     }
 
-                    AnimeCard(
-                        anime = anime,
-                        onClick = { onSelectAnime(anime) }
+                    MediaCard(
+                        item = item,
+                        onClick = { onSelectMedia(item) }
                     )
                 }
 
@@ -570,7 +577,7 @@ fun HomeScreen(
                                 .padding(16.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("Loading more anime…", color = AccentRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            Text("Loading more titles…", color = AccentRed, fontSize = 14.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

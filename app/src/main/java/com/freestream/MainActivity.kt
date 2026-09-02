@@ -8,58 +8,72 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.tv.material3.Surface
-import com.freestream.data.model.AnimeItem
-import com.freestream.data.repository.AnimeRepository
+import com.freestream.data.model.MediaItem
+import com.freestream.data.repository.MediaRepository
 import com.freestream.resolver.StreamResolver
 import com.freestream.ui.screens.HomeScreen
 import com.freestream.ui.screens.MediaPlayDialog
-import com.freestream.ui.theme.AnimeTVTheme
+import com.freestream.ui.screens.SettingsDialog
+import com.freestream.ui.theme.FreeStreamTheme
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var repository: AnimeRepository
+    private lateinit var repository: MediaRepository
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        repository = AnimeRepository(applicationContext)
-        val apiBase = getString(R.string.api_base_url)
-        val streamResolver = StreamResolver(apiBase)
+        repository = MediaRepository(applicationContext)
+        val defaultApiUrl = getString(R.string.api_base_url)
 
         setContent {
-            AnimeTVTheme {
+            FreeStreamTheme {
+                var apiBaseUrl by remember { mutableStateOf(repository.getApiBaseUrl(defaultApiUrl)) }
+                val streamResolver = remember(apiBaseUrl) { StreamResolver(apiBaseUrl) }
+                var showSettings by remember { mutableStateOf(false) }
+
                 Surface(modifier = Modifier.fillMaxSize()) {
-                    var selectedAnime by remember { mutableStateOf<AnimeItem?>(null) }
+                    var selectedItem by remember { mutableStateOf<MediaItem?>(null) }
                     var pendingTagFilter by remember { mutableStateOf<String?>(null) }
                     var removeOverlayVisible by remember { mutableStateOf(false) }
 
-                    BackHandler(enabled = selectedAnime != null && !removeOverlayVisible) {
-                        selectedAnime = null
+                    BackHandler(enabled = selectedItem != null && !removeOverlayVisible) {
+                        selectedItem = null
                     }
 
                     HomeScreen(
                         repository = repository,
-                        onSelectAnime = { anime ->
+                        onSelectMedia = { item ->
                             if (!removeOverlayVisible) {
-                                selectedAnime = anime
+                                selectedItem = item
                             }
                         },
                         externalAddTag = pendingTagFilter,
                         onClearExternalTag = { pendingTagFilter = null },
-                        onRemoveOverlayVisible = { removeOverlayVisible = it }
+                        onRemoveOverlayVisible = { removeOverlayVisible = it },
+                        onOpenSettings = { showSettings = true },
                     )
 
                     if (!removeOverlayVisible) {
-                        selectedAnime?.let { anime ->
+                        selectedItem?.let { item ->
                             MediaPlayDialog(
-                                item = anime,
+                                item = item,
                                 streamResolver = streamResolver,
-                                onDismiss = { selectedAnime = null },
+                                onDismiss = { selectedItem = null },
                                 onSelectTag = { tag ->
-                                    selectedAnime = null
+                                    selectedItem = null
                                     pendingTagFilter = tag
-                                }
+                                },
                             )
                         }
+                    }
+
+                    if (showSettings) {
+                        SettingsDialog(
+                            repository = repository,
+                            defaultApiUrl = defaultApiUrl,
+                            onDismiss = { showSettings = false },
+                            onSaved = { apiBaseUrl = repository.getApiBaseUrl(defaultApiUrl) },
+                        )
                     }
                 }
             }

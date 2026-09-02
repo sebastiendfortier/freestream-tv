@@ -21,7 +21,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.tv.material3.*
 import coil.compose.AsyncImage
-import com.freestream.data.model.AnimeItem
+import com.freestream.data.model.MediaItem
 import com.freestream.data.model.ResolvedStream
 import com.freestream.player.TvPlayerActivity
 import com.freestream.resolver.StreamResolver
@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun MediaPlayDialog(
-    item: AnimeItem,
+    item: MediaItem,
     streamResolver: StreamResolver,
     onDismiss: () -> Unit,
     onSelectTag: ((String) -> Unit)? = null,
@@ -71,14 +71,19 @@ fun MediaPlayDialog(
                     sourceUrl = stream.sourceUrl.ifBlank { stream.streamUrl },
                     contentType = stream.contentType,
                 )
+                val epKey = stream.sourceUrl.ifBlank { stream.streamUrl }
                 playerLauncher.launch(
                     TvPlayerActivity.createIntent(
                         context = context,
                         resolved = resolved,
                         title = item.title,
                         seriesTitle = item.title,
+                        episodeUrl = epKey,
+                        episodeTitle = if (isTv) "S${season}E${episode}" else item.title,
+                        seasonNumber = season.toString(),
+                        episodeNumber = episode.toString(),
                         posterUrl = item.picture,
-                    )
+                    ),
                 )
             } catch (err: Exception) {
                 Toast.makeText(context, "Play failed: ${err.message}", Toast.LENGTH_LONG).show()
@@ -118,7 +123,7 @@ fun MediaPlayDialog(
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(item.title, fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
                         Text(
-                            "${item.type} · ${item.year ?: "?"} · ★ ${"%.1f".format(item.scoreMean)}",
+                            "${item.type} · ${item.year ?: "?"} · ★ ${"%.1f".format(item.imdbRating)}",
                             color = TextMuted,
                         )
                         if (item.tags.isNotEmpty()) {

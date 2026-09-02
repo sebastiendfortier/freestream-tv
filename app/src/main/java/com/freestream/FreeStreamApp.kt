@@ -6,32 +6,17 @@ import coil.ImageLoaderFactory
 import coil.disk.DiskCache
 import coil.memory.MemoryCache
 import coil.request.CachePolicy
-import com.freestream.resolver.WcoHttpClient
 import okhttp3.OkHttpClient
 
 class FreeStreamApp : Application(), ImageLoaderFactory {
 
-    lateinit var wcoHttpClient: WcoHttpClient
-        private set
-
     override fun onCreate() {
         super.onCreate()
         instance = this
-        wcoHttpClient = WcoHttpClient()
     }
 
     override fun newImageLoader(): ImageLoader {
-        val okHttp = OkHttpClient.Builder()
-            .addInterceptor { chain ->
-                val request = chain.request()
-                val builder = request.newBuilder()
-                if (request.url.host.contains("myanimelist.net")) {
-                    builder.header("Referer", "https://myanimelist.net/")
-                }
-                chain.proceed(builder.build())
-            }
-            .build()
-
+        val okHttp = OkHttpClient.Builder().build()
         return ImageLoader.Builder(this)
             .okHttpClient(okHttp)
             .crossfade(true)
@@ -54,8 +39,7 @@ class FreeStreamApp : Application(), ImageLoaderFactory {
         @Volatile
         private var instance: FreeStreamApp? = null
 
-        fun getInstance(): FreeStreamApp {
-            return instance ?: throw IllegalStateException("FreeStreamApp not initialized")
-        }
+        fun getInstance(): FreeStreamApp = instance
+            ?: throw IllegalStateException("FreeStreamApp not initialized")
     }
 }

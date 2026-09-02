@@ -1,7 +1,7 @@
 package com.freestream.data.repository
 
 import android.content.Context
-import com.freestream.data.model.AnimeItem
+import com.freestream.data.model.MediaItem
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -10,20 +10,17 @@ import kotlinx.serialization.json.Json
 import java.io.File
 import java.util.zip.GZIPInputStream
 
-/**
- * Loads the MAL catalog from the gzip JSON export of anime_view.parquet.
- * Parquet remains the desktop source of truth; JSON.gz is the Android runtime format.
- */
+/** Loads titles catalog from bundled gzip JSON export. */
 class CatalogRepository(private val context: Context) {
 
     private val json = Json { ignoreUnknownKeys = true }
     private val loadMutex = Mutex()
     @Volatile
-    private var catalog: List<AnimeItem>? = null
+    private var catalog: List<MediaItem>? = null
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    suspend fun ensureLoaded(): List<AnimeItem> = withContext(Dispatchers.IO) {
+    suspend fun ensureLoaded(): List<MediaItem> = withContext(Dispatchers.IO) {
         catalog?.let { return@withContext it }
         loadMutex.withLock {
             catalog?.let { return@withLock it }
@@ -33,7 +30,7 @@ class CatalogRepository(private val context: Context) {
         }
     }
 
-    private fun loadCatalogLocked(): List<AnimeItem> {
+    private fun loadCatalogLocked(): List<MediaItem> {
         val catalogFile = File(context.filesDir, CATALOG_FILE_NAME)
         val assetVersion = prefs.getInt(PREF_ASSET_VERSION, 0)
 
@@ -50,7 +47,7 @@ class CatalogRepository(private val context: Context) {
 
         val isGzip = prefs.getBoolean(PREF_ASSET_GZIP, isGzipFile(catalogFile))
         val text = readCatalogText(catalogFile, isGzip)
-        return json.decodeFromString<List<AnimeItem>>(text)
+        return json.decodeFromString<List<MediaItem>>(text)
     }
 
     private fun resolveCatalogAsset(): Pair<String, Boolean> {
@@ -81,7 +78,7 @@ class CatalogRepository(private val context: Context) {
         }
     }
 
-    suspend fun getFilteredAnime(
+    suspend fun getFilteredMedia(
         type: String = "ALL",
         minYear: Int = 0,
         minScore: Float = 0f,
@@ -92,15 +89,15 @@ class CatalogRepository(private val context: Context) {
         sortBy: String = "score",
         limit: Int = 120,
         offset: Int = 0,
-    ): List<AnimeItem> = withContext(Dispatchers.Default) {
+    ): List<MediaItem> = withContext(Dispatchers.Default) {
         val filtered = ensureLoaded().asSequence().filter { item ->
             matchesFilters(item, type, minYear, minScore, airingStatus, includeTags, excludeTags, query)
         }
 
         val sorted = when (sortBy) {
-            "year" -> filtered.sortedWith(compareByDescending<AnimeItem> { it.year }.thenByDescending { it.scoreMean })
+            "year" -> filtered.sortedWith(compareByDescending<MediaItem> { it.year }.thenByDescending { it.imdbRating })
             "title" -> filtered.sortedBy { it.title.lowercase() }
-            else -> filtered.sortedByDescending { it.scoreMean }
+            else -> filtered.sortedByDescending { it.imdbRating }
         }
 
         sorted.drop(offset).take(limit).toList()
@@ -120,16 +117,16 @@ class CatalogRepository(private val context: Context) {
         }
     }
 
-    suspend fun search(query: String, limit: Int = 100): List<AnimeItem> =
-        getFilteredAnime(query = query, limit = limit)
+    suspend fun search(query: String, limit: Int = 100): List<MediaItem> =
+        getFilteredMedia(query = query, limit = limit)
 
-    suspend fun getAnimeByTitle(title: String): AnimeItem? = withContext(Dispatchers.Default) {
+    suspend fun getMediaByTitle(title: String): MediaItem? = withContext(Dispatchers.Default) {
         val needle = title.trim().lowercase()
         ensureLoaded().firstOrNull { it.title.equals(needle, ignoreCase = true) }
     }
 
     private fun matchesFilters(
-        item: AnimeItem,
+        item: MediaItem,
         type: String,
         minYear: Int,
         minScore: Float,
@@ -142,7 +139,7 @@ class CatalogRepository(private val context: Context) {
             return false
         }
         if (minYear > 0 && (item.year == null || item.year < minYear)) return false
-        if (minScore > 0f && item.scoreMean < minScore) return false
+        if (minScore > 0f && item.imdbRating < minScore) return false
 
         val statusFilter = airingStatus.trim().lowercase()
         if (statusFilter.isNotEmpty() && statusFilter != "all") {
@@ -180,7 +177,7 @@ class CatalogRepository(private val context: Context) {
         private const val PREFS_NAME = "freestream_catalog"
         private const val PREF_ASSET_VERSION = "catalog_asset_version"
         private const val PREF_ASSET_GZIP = "catalog_asset_gzip"
-        private const val CATALOG_ASSET_VERSION = 1
+        private const val CATALOG_ASSET_VERSION = 2
         private const val ASSET_GZ = "titles_catalog.json.gz"
         private const val ASSET_JSON = "titles_catalog.json"
         private const val CATALOG_FILE_NAME = "titles_catalog.cache"

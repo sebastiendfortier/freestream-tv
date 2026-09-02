@@ -13,13 +13,13 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = TextWhite,
     surfaceVariant = SurfaceVariantDark,
     onSurfaceVariant = TextMuted,
-    border = BorderDark
+    border = BorderDark,
 )
 
 @Composable
-fun AnimeTVTheme(content: @Composable () -> Unit) {
+fun FreeStreamTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = DarkColorScheme,
-        content = content
+        content = content,
     )
 }

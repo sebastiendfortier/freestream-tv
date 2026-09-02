@@ -23,7 +23,7 @@ import androidx.media3.ui.PlayerView
 import com.freestream.data.model.PlaybackEpisode
 import com.freestream.data.model.PlaybackSession
 import com.freestream.data.model.ResolvedStream
-import com.freestream.data.repository.AnimeRepository
+import com.freestream.data.repository.MediaRepository
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -36,7 +36,7 @@ class TvPlayerActivity : ComponentActivity() {
 
     private var player: ExoPlayer? = null
     private lateinit var playerView: PlayerView
-    private lateinit var repository: AnimeRepository
+    private lateinit var repository: MediaRepository
 
     private var session: PlaybackSession? = null
     private var currentIndex: Int = 0
@@ -54,7 +54,7 @@ class TvPlayerActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        repository = AnimeRepository(applicationContext)
+        repository = MediaRepository(applicationContext)
 
         onBackPressedDispatcher.addCallback(
             this,
@@ -78,7 +78,7 @@ class TvPlayerActivity : ComponentActivity() {
 
         val streamUrl = intent.getStringExtra(EXTRA_STREAM_URL) ?: return finish()
         val streamTitle = intent.getStringExtra(EXTRA_TITLE) ?: "Episode"
-        val referer = intent.getStringExtra(EXTRA_REFERER) ?: "https://embed.wcostream.com/"
+        val referer = intent.getStringExtra(EXTRA_REFERER) ?: ""
         val userAgent = intent.getStringExtra(EXTRA_USER_AGENT) ?: "Mozilla/5.0"
         val startPositionMs = intent.getLongExtra(EXTRA_START_POSITION_MS, 0L)
         val isHls = streamUrl.contains(".m3u8")
@@ -180,85 +180,21 @@ class TvPlayerActivity : ComponentActivity() {
         }
 
         val activeSession = session
-        if (activeSession == null) {
-            finish()
-            return
+        if (activeSession != null && currentIndex + 1 < activeSession.episodes.size) {
+            Toast.makeText(this, "Auto-advance not available", Toast.LENGTH_SHORT).show()
         }
-
-        val nextIndex = currentIndex + 1
-        if (nextIndex >= activeSession.episodes.size) {
-            setResult(
-                Activity.RESULT_OK,
-                Intent().putExtra(EXTRA_SERIES_COMPLETE, true)
-            )
-            finish()
-            return
-        }
-
-        playEpisodeAt(nextIndex)
+        finish()
     }
 
     private fun playEpisodeAt(index: Int) {
-        val activeSession = session ?: return
-        val episode = activeSession.episodes.getOrNull(index) ?: return
-
-        advancingToNext = true
-        progressTrackerJob?.cancel()
-
-        lifecycleScope.launch {
-            try {
-                val resolved = resolveEpisode(activeSession, episode)
-                currentIndex = index
-                episodeUrl = episode.url
-                episodeTitle = episode.cleanLabel
-                seasonNumber = episode.seasonNumber.ifEmpty { "1" }
-                episodeNumber = episode.episodeNumber.ifEmpty { "1" }
-
-                val referer = resolved.headers["Referer"] ?: "https://embed.wcostream.com/"
-                val userAgent = resolved.headers["User-Agent"] ?: "Mozilla/5.0"
-                val isHls = resolved.streamUrl.contains(".m3u8")
-                val title = "${activeSession.seriesTitle} - ${episode.cleanLabel}"
-
-                initializePlayer(
-                    url = resolved.streamUrl,
-                    title = title,
-                    referer = referer,
-                    userAgent = userAgent,
-                    isHls = isHls,
-                    startPositionMs = 0L
-                )
-            } catch (e: Exception) {
-                Toast.makeText(
-                    this@TvPlayerActivity,
-                    "Next episode failed: ${e.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-                setResult(
-                    Activity.RESULT_OK,
-                    Intent().putExtra(EXTRA_SERIES_COMPLETE, true)
-                )
-                finish()
-            } finally {
-                advancingToNext = false
-            }
-        }
+        finish()
     }
 
     private suspend fun resolveEpisode(
         activeSession: PlaybackSession,
         episode: PlaybackEpisode
     ): ResolvedStream {
-        return if (activeSession.source == "otaku") {
-            repository.otakuResolver.resolveEpisodeStreams(
-                episode.url,
-                preferredQuality = activeSession.preferredQuality
-            )
-        } else {
-            repository.wcoResolver.resolveEpisodeStreams(
-                episode.url,
-                preferredQuality = activeSession.preferredQuality
-            )
-        }
+        throw UnsupportedOperationException("Episode queue playback is not supported")
     }
 
     private fun startProgressTracker() {
@@ -414,7 +350,7 @@ class TvPlayerActivity : ComponentActivity() {
             return Intent(context, TvPlayerActivity::class.java).apply {
                 putExtra(EXTRA_STREAM_URL, resolved.streamUrl)
                 putExtra(EXTRA_TITLE, title)
-                putExtra(EXTRA_REFERER, resolved.headers["Referer"] ?: "https://embed.wcostream.com/")
+                putExtra(EXTRA_REFERER, resolved.headers["Referer"] ?: "")
                 putExtra(EXTRA_USER_AGENT, resolved.headers["User-Agent"] ?: "Mozilla/5.0")
                 putExtra(EXTRA_START_POSITION_MS, startPositionMs)
                 putExtra(EXTRA_EPISODE_URL, episodeUrl)
