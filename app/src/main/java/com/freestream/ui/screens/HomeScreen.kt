@@ -218,7 +218,6 @@ fun HomeScreen(
     externalAddTag: String? = null,
     onClearExternalTag: () -> Unit = {},
     onRemoveOverlayVisible: (Boolean) -> Unit = {},
-    onOpenSettings: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -366,13 +365,6 @@ fun HomeScreen(
                     isPrimary = activeFilterCount > 0,
                     fontSize = 13.sp,
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp)
-                )
-
-                TvActionButton(
-                    text = "⚙ Settings",
-                    onClick = onOpenSettings,
-                    fontSize = 13.sp,
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
                 )
 
                 Text(

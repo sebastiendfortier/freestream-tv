@@ -13,7 +13,6 @@ import com.freestream.data.repository.MediaRepository
 import com.freestream.resolver.StreamResolver
 import com.freestream.ui.screens.HomeScreen
 import com.freestream.ui.screens.MediaPlayDialog
-import com.freestream.ui.screens.SettingsDialog
 import com.freestream.ui.theme.FreeStreamTheme
 
 class MainActivity : ComponentActivity() {
@@ -23,16 +22,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         repository = MediaRepository(applicationContext)
-        val defaultApiUrl = getString(R.string.api_base_url)
+        val streamResolver = StreamResolver()
 
         setContent {
             FreeStreamTheme {
-                var apiBaseUrl by remember { mutableStateOf(repository.getApiBaseUrl(defaultApiUrl)) }
-                val streamResolver = remember(apiBaseUrl) {
-                    StreamResolver(remoteBaseUrl = apiBaseUrl.ifBlank { null })
-                }
-                var showSettings by remember { mutableStateOf(false) }
-
                 Surface(modifier = Modifier.fillMaxSize()) {
                     var selectedItem by remember { mutableStateOf<MediaItem?>(null) }
                     var selectedSeason by remember { mutableIntStateOf(1) }
@@ -56,7 +49,6 @@ class MainActivity : ComponentActivity() {
                         externalAddTag = pendingTagFilter,
                         onClearExternalTag = { pendingTagFilter = null },
                         onRemoveOverlayVisible = { removeOverlayVisible = it },
-                        onOpenSettings = { showSettings = true },
                     )
 
                     if (!removeOverlayVisible) {
@@ -73,15 +65,6 @@ class MainActivity : ComponentActivity() {
                                 initialEpisode = selectedEpisode,
                             )
                         }
-                    }
-
-                    if (showSettings) {
-                        SettingsDialog(
-                            repository = repository,
-                            defaultApiUrl = defaultApiUrl,
-                            onDismiss = { showSettings = false },
-                            onSaved = { apiBaseUrl = repository.getApiBaseUrl(defaultApiUrl) },
-                        )
                     }
                 }
             }
