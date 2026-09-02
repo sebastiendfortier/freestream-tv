@@ -118,8 +118,7 @@ internal class LevidiaResolver(
     }
 
     private fun cookieHeader(pageHtml: String, referer: String): String {
-        val url = okhttp3.HttpUrl.Companion.toHttpUrlOrNull(referer)
-            ?: okhttp3.HttpUrl.Companion.toHttpUrlOrNull(base)
+        val url = referer.toHttpUrlOrNull() ?: base.toHttpUrlOrNull()
         val cookies = url?.let { client.cookieJar.loadForRequest(it) }
             ?.associate { it.name to it.value }
             ?.toMutableMap()

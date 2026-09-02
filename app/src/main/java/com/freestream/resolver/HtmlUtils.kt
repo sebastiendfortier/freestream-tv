@@ -24,7 +24,7 @@ internal fun parseAllLinks(html: String): List<Pair<String, String>> {
 internal fun parseSpansContaining(html: String, tokens: List<String>): List<String> {
     val pattern = Regex(
         """<span[^>]*class=["']([^"']+)["'][^>]*>(.*?)</span>""",
-        RegexOption.DOT_MATCHES_ALL or RegexOption.IGNORE_CASE,
+        setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE),
     )
     return pattern.findAll(html).filter { match ->
         val cls = match.groupValues[1].lowercase()
@@ -35,7 +35,7 @@ internal fun parseSpansContaining(html: String, tokens: List<String>): List<Stri
 internal fun extractMainlinkBlock(html: String): String? {
     val pattern = Regex(
         """<div[^>]*class=["'][^"']*\bmainlink\b[^"']*["'][^>]*>(.*?)</div>""",
-        RegexOption.DOT_MATCHES_ALL or RegexOption.IGNORE_CASE,
+        setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE),
     )
     return pattern.find(html)?.groupValues?.get(1)
 }
