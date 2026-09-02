@@ -60,20 +60,22 @@ class StreamResolver(
         episode: Int?,
     ): List<StreamPayload> {
         val hosters = levidia.scrape(title, year, mediaType, season, episode)
+        if (hosters.isEmpty()) {
+            throw IllegalStateException("No streams found for $title")
+        }
         for (hoster in hosters) {
-            if (hoster.url.contains("wootly", ignoreCase = true)) {
-                val resolved = wootly.resolve(hoster.url) ?: continue
-                return listOf(
-                    StreamPayload(
-                        streamUrl = resolved.streamUrl,
-                        quality = resolved.quality,
-                        headers = resolved.headers,
-                        provider = hoster.provider,
-                        sourceUrl = resolved.sourceUrl,
-                        contentType = resolved.contentType,
-                    ),
-                )
-            }
+            if (!hoster.url.contains("wootly", ignoreCase = true)) continue
+            val resolved = wootly.resolve(hoster.url) ?: continue
+            return listOf(
+                StreamPayload(
+                    streamUrl = resolved.streamUrl,
+                    quality = resolved.quality,
+                    headers = resolved.headers,
+                    provider = hoster.provider,
+                    sourceUrl = resolved.sourceUrl,
+                    contentType = resolved.contentType,
+                ),
+            )
         }
         throw IllegalStateException("No playable stream found (try another episode)")
     }

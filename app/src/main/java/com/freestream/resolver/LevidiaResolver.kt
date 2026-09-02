@@ -13,8 +13,7 @@ internal class LevidiaResolver(
     private val client: OkHttpClient,
 ) {
     private val base = "https://www.levidia.ch"
-    private val ua =
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    private val ua = KODI_UA
 
     data class HosterLink(val provider: String, val url: String)
 
@@ -182,7 +181,11 @@ internal class LevidiaResolver(
             val store = mutableMapOf<String, List<Cookie>>()
             val jar = object : CookieJar {
                 override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                    store[url.host] = cookies
+                    val merged = store.getOrDefault(url.host, emptyList())
+                        .associateBy { it.name }
+                        .toMutableMap()
+                    cookies.forEach { merged[it.name] = it }
+                    store[url.host] = merged.values.toList()
                 }
 
                 override fun loadForRequest(url: HttpUrl): List<Cookie> = store[url.host].orEmpty()
