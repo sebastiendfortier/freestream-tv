@@ -99,11 +99,7 @@ internal class LevidiaResolver(
         if (hosts.isEmpty()) hosts = parseSpansContaining(page, listOf("xxx1"))
         var links = parseLinks(page, "xxx xflv")
         if (links.isEmpty()) {
-            links = Regex("""<a[^>]*target=["']_blank["'][^>]*href=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
-                .findAll(page)
-                .map { it.groupValues[1] }
-                .filter { !it.contains("imdb", ignoreCase = true) }
-                .toList()
+            links = parseBlankTargetLinks(page)
         }
         val cookieHeader = cookieHeader(page, referer)
         val out = mutableListOf<HosterLink>()
@@ -117,11 +113,13 @@ internal class LevidiaResolver(
     }
 
     private fun cookieHeader(pageHtml: String, referer: String): String {
-        val url = referer.toHttpUrlOrNull() ?: base.toHttpUrlOrNull()
-        val cookies = url?.let { client.cookieJar.loadForRequest(it) }
-            ?.associate { it.name to it.value }
-            ?.toMutableMap()
-            ?: mutableMapOf()
+        val cookies = linkedMapOf<String, String>()
+        base.toHttpUrlOrNull()?.let { client.cookieJar.loadForRequest(it) }
+            .orEmpty()
+            .forEach { cookies[it.name] = it.value }
+        referer.toHttpUrlOrNull()?.let { client.cookieJar.loadForRequest(it) }
+            .orEmpty()
+            .forEach { cookies[it.name] = it.value }
         Regex("""_3chk\(['"](.+?)['"],['"](.+?)['"]\)""")
             .find(pageHtml)
             ?.let { cookies[it.groupValues[1]] = it.groupValues[2] }

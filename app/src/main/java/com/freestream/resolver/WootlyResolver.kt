@@ -20,13 +20,13 @@ internal class WootlyResolver(
             val iframe = Regex("""<iframe[^>]+src=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
                 .find(pageBody)?.groupValues?.get(1) ?: return null
             val embedUrl = if (iframe.startsWith("//")) "https:$iframe" else iframe
-            val embedHost = embedUrl.toHttpUrlOrNull()?.host ?: "web.wootly.ch"
+            val pageOrigin = pageUrl.host
             val cookieHeader = cookieHeader(pageUrl, embedUrl.toHttpUrlOrNull())
             val postReq = Request.Builder()
                 .url(embedUrl)
                 .header("User-Agent", ua)
                 .header("Referer", webUrl)
-                .header("Origin", "https://$embedHost")
+                .header("Origin", "https://$pageOrigin")
                 .apply { if (cookieHeader.isNotBlank()) header("Cookie", cookieHeader) }
                 .post(FormBody.Builder().add("qdfx", "1").build())
                 .build()
