@@ -196,7 +196,12 @@ fun MediaPlayDialog(
                     ),
                 )
             } catch (err: Exception) {
-                Toast.makeText(context, "Play failed: ${err.message}", Toast.LENGTH_LONG).show()
+                android.util.Log.e("MediaPlayDialog", "play failed", err)
+                Toast.makeText(
+                    context,
+                    "Play failed: ${err.message ?: err.javaClass.simpleName}",
+                    Toast.LENGTH_LONG,
+                ).show()
             } finally {
                 isResolving = false
                 resolvingLabel = ""

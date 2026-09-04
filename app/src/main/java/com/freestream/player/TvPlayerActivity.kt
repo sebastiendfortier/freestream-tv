@@ -119,12 +119,19 @@ class TvPlayerActivity : ComponentActivity() {
             .setUserAgent(userAgent)
             .setDefaultRequestProperties(requestProps)
             .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(30_000)
+            .setReadTimeoutMs(60_000)
 
         val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory)
 
         val mediaItem = MediaItem.Builder()
             .setUri(Uri.parse(url))
-            .setMimeType(if (isHls) MimeTypes.APPLICATION_M3U8 else MimeTypes.VIDEO_MP4)
+            .apply {
+                if (isHls) {
+                    setMimeType(MimeTypes.APPLICATION_M3U8)
+                }
+                // Let ExoPlayer sniff progressive MP4/containers — forcing VIDEO_MP4 breaks some CDNs on Amlogic.
+            }
             .setMediaMetadata(
                 androidx.media3.common.MediaMetadata.Builder()
                     .setTitle(title)
@@ -169,6 +176,16 @@ class TvPlayerActivity : ComponentActivity() {
                         if (playbackState == Player.STATE_ENDED) {
                             onEpisodeEnded()
                         }
+                    }
+
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        val detail = error.cause?.message ?: error.message ?: "unknown"
+                        Toast.makeText(
+                            this@TvPlayerActivity,
+                            "Playback error: $detail",
+                            Toast.LENGTH_LONG,
+                        ).show()
+                        android.util.Log.e("TvPlayer", "playback failed", error)
                     }
                 })
             }
