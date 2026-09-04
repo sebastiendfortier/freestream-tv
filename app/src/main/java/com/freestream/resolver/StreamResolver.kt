@@ -54,8 +54,9 @@ class StreamResolver(
         year: Int? = null,
         season: Int? = null,
         episode: Int? = null,
+        episodeUrl: String? = null,
     ): List<StreamPayload> = withContext(Dispatchers.IO) {
-        resolveLocal(title, mediaType, year, season, episode)
+        resolveLocal(title, mediaType, year, season, episode, episodeUrl)
     }
 
     fun toResolvedStream(payload: StreamPayload): ResolvedStream =
@@ -73,8 +74,9 @@ class StreamResolver(
         year: Int?,
         season: Int?,
         episode: Int?,
+        episodeUrl: String? = null,
     ): List<StreamPayload> {
-        val hosters = levidia.scrape(title, year, mediaType, season, episode)
+        val hosters = levidia.scrape(title, year, mediaType, season, episode, episodeUrl)
         if (hosters.isEmpty()) {
             throw IllegalStateException(
                 if (mediaType.equals("tv", ignoreCase = true)) {
@@ -86,7 +88,7 @@ class StreamResolver(
         }
         val wootlyHosters = hosters.filter { it.url.contains("wootly", ignoreCase = true) }
         if (wootlyHosters.isEmpty()) {
-            throw IllegalStateException("No Wootly hosters for $title")
+            throw IllegalStateException("No Wootly hosters for $title (found ${hosters.size} other)")
         }
         for (hoster in wootlyHosters) {
             val resolved = wootly.resolve(hoster.url) ?: continue

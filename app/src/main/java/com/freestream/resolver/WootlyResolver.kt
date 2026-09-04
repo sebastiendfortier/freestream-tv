@@ -5,6 +5,7 @@ import okhttp3.FormBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 
 internal class WootlyResolver(
     private val client: OkHttpClient,
@@ -21,7 +22,7 @@ internal class WootlyResolver(
                 .find(pageBody)?.groupValues?.get(1) ?: return null
             val embedUrl = if (iframe.startsWith("//")) "https:$iframe" else iframe
             val pageOrigin = pageUrl.host
-            val cookieHeader = cookieHeader(pageUrl, embedUrl.toHttpUrlOrNull())
+            val cookieHeader = cookiesFromResponse(pageResp)
             val postReq = Request.Builder()
                 .url(embedUrl)
                 .header("User-Agent", ua)
@@ -33,7 +34,6 @@ internal class WootlyResolver(
             val postBody = client.newCall(postReq).execute().use { it.body?.string().orEmpty() }
             val tk = Regex("""tk\s*=\s*["']([^"']+)""").find(postBody)?.groupValues?.get(1) ?: return null
             val vd = Regex("""vd\s*=\s*["']([^"']+)""").find(postBody)?.groupValues?.get(1) ?: return null
-            // Match Python urljoin(embed, "/grabm") → https://host/grabm (site root), not nested path.
             val embedParsed = embedUrl.toHttpUrlOrNull() ?: return null
             val grabBase = embedParsed.newBuilder()
                 .encodedPath("/grabm")
@@ -49,6 +49,7 @@ internal class WootlyResolver(
                     .url(grabUrl)
                     .header("User-Agent", ua)
                     .header("Referer", grabReferer)
+                    .apply { if (cookieHeader.isNotBlank()) header("Cookie", cookieHeader) }
                     .get()
                     .build(),
             ).execute().use { it.body?.string().orEmpty().trim() }
@@ -68,11 +69,19 @@ internal class WootlyResolver(
         }
     }
 
-    private fun cookieHeader(vararg urls: okhttp3.HttpUrl?): String {
+    private fun cookiesFromResponse(resp: Response): String {
         val cookies = linkedMapOf<String, String>()
-        for (url in urls) {
-            url ?: continue
-            client.cookieJar.loadForRequest(url).forEach { cookies[it.name] = it.value }
+        fun ingest(raw: String) {
+            val pair = raw.substringBefore(';')
+            val name = pair.substringBefore('=').trim()
+            val value = pair.substringAfter('=', missingDelimiterValue = "").trim()
+            if (name.isNotEmpty() && value.isNotEmpty()) cookies[name] = value
+        }
+        for (raw in resp.headers("Set-Cookie")) ingest(raw)
+        var prior = resp.priorResponse
+        while (prior != null) {
+            for (raw in prior.headers("Set-Cookie")) ingest(raw)
+            prior = prior.priorResponse
         }
         return cookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
     }

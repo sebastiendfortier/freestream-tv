@@ -165,6 +165,7 @@ fun MediaPlayDialog(
                     year = item.year,
                     season = if (isTv) season else null,
                     episode = if (isTv) episode else null,
+                    episodeUrl = ep?.episodeUrl?.takeIf { it.isNotBlank() },
                 )
                 val payload = streams.firstOrNull()
                     ?: throw IllegalStateException("No streams returned")

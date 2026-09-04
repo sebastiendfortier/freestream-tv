@@ -1,12 +1,13 @@
 package com.freestream.resolver
 
-import okhttp3.Cookie
 import okhttp3.CookieJar
-import okhttp3.HttpUrl
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.Response
 import java.net.URLEncoder
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 
 internal class LevidiaResolver(
@@ -14,6 +15,8 @@ internal class LevidiaResolver(
 ) {
     private val base = "https://www.levidia.ch"
     private val ua = KODI_UA
+    private val sessionCookies = ConcurrentHashMap<String, String>()
+    private val lock = Any()
 
     data class HosterLink(val provider: String, val url: String)
 
@@ -23,10 +26,62 @@ internal class LevidiaResolver(
         mediaType: String,
         season: Int?,
         episode: Int?,
-    ): List<HosterLink> {
+        episodeUrl: String? = null,
+    ): List<HosterLink> = synchronized(lock) {
+        sessionCookies.clear()
         get("$base/")
+        val matchUrl = findSeriesUrl(title, year) ?: return emptyList()
+
+        var pageUrl = matchUrl
+        if (mediaType.equals("tv", ignoreCase = true) && season != null) {
+            pageUrl = "$matchUrl&s=$season"
+        }
+
+        val referer: String
+        val page: String
+        if (!episodeUrl.isNullOrBlank()) {
+            referer = abs(episodeUrl)
+            page = get(referer, referer = pageUrl)
+        } else if (mediaType.equals("tv", ignoreCase = true) && season != null && episode != null) {
+            val seasonPage = get(pageUrl, referer = base)
+            val epHref = findEpisodeHref(seasonPage, season, episode) ?: return emptyList()
+            referer = abs(epHref)
+            page = get(referer, referer = pageUrl)
+        } else {
+            referer = pageUrl
+            page = get(pageUrl, referer = base)
+        }
+
+        return collectHosters(page, referer)
+    }
+
+    fun listEpisodes(title: String, year: Int?, season: Int): List<TvEpisodeInfo> = synchronized(lock) {
+        sessionCookies.clear()
+        get("$base/")
+        val matchUrl = findSeriesUrl(title, year) ?: return emptyList()
+        val page = get("$matchUrl&s=$season", referer = base)
+        val prefix = "s${season}e"
+        val seen = mutableSetOf<Int>()
+        val out = mutableListOf<TvEpisodeInfo>()
+        for ((label, href) in parseAllLinks(page)) {
+            val hrefL = href.lowercase()
+            if (!hrefL.contains(prefix)) continue
+            val m = Regex("""s${season}e(\d+)""", RegexOption.IGNORE_CASE).find(hrefL) ?: continue
+            val ep = m.groupValues[1].toIntOrNull() ?: continue
+            if (!seen.add(ep)) continue
+            out += TvEpisodeInfo(
+                season = season,
+                episode = ep,
+                title = stripTags(label).ifBlank { "Episode $ep" },
+                episodeUrl = abs(href),
+            )
+        }
+        return out.sortedBy { it.episode }
+    }
+
+    private fun findSeriesUrl(title: String, year: Int?): String? {
         val searchHtml = post("$base/search.php?q=${enc(title)}")
-        val block = extractMainlinkBlock(searchHtml) ?: return emptyList()
+        val block = extractMainlinkBlock(searchHtml) ?: return null
         val links = parseAllLinks(block)
         val titleKey = cleanTitle(title)
         var matchUrl: String? = null
@@ -34,7 +89,8 @@ internal class LevidiaResolver(
             val years = Regex("""\((\d{4})\)""").findAll(label).map { it.groupValues[1] }.toList()
             if (years.isEmpty()) continue
             val name = label.replace(Regex("""\(\d{4}\)"""), "").trim()
-            if (cleanTitle(name) == titleKey || cleanTitle(name).contains(titleKey)) {
+            val cleaned = cleanTitle(name)
+            if (cleaned == titleKey || cleaned.contains(titleKey)) {
                 if (year != null && years.first() != year.toString()) continue
                 matchUrl = abs(href)
                 break
@@ -43,55 +99,12 @@ internal class LevidiaResolver(
         if (matchUrl == null && links.isNotEmpty()) {
             matchUrl = abs(links.first().second)
         }
-        matchUrl ?: return emptyList()
-
-        var pageUrl = matchUrl
-        if (mediaType.equals("tv", ignoreCase = true) && season != null) {
-            pageUrl = "$matchUrl&s=$season"
-        }
-        var page = get(pageUrl, referer = base)
-        var referer = pageUrl
-        if (mediaType.equals("tv", ignoreCase = true) && season != null && episode != null) {
-            val epPattern = Regex("""s${season}e$episode(?!\d)""", RegexOption.IGNORE_CASE)
-            val epHref = parseAllLinks(page).firstOrNull { epPattern.containsMatchIn(it.second) }?.second
-                ?: return emptyList()
-            referer = abs(epHref)
-            page = get(referer, referer = pageUrl)
-        }
-        return collectHosters(page, referer)
+        return matchUrl
     }
 
-    fun listEpisodes(title: String, year: Int?, season: Int): List<TvEpisodeInfo> {
-        get("$base/")
-        val searchHtml = post("$base/search.php?q=${enc(title)}")
-        val block = extractMainlinkBlock(searchHtml) ?: return emptyList()
-        val links = parseAllLinks(block)
-        val titleKey = cleanTitle(title)
-        var matchUrl: String? = null
-        for ((label, href) in links) {
-            val years = Regex("""\((\d{4})\)""").findAll(label).map { it.groupValues[1] }.toList()
-            if (years.isEmpty()) continue
-            val name = label.replace(Regex("""\(\d{4}\)"""), "").trim()
-            if (cleanTitle(name).contains(titleKey)) {
-                if (year != null && years.first() != year.toString()) continue
-                matchUrl = abs(href)
-                break
-            }
-        }
-        matchUrl ?: return emptyList()
-        val page = get("$matchUrl&s=$season", referer = base)
-        val prefix = "s${season}e"
-        val seen = mutableSetOf<Int>()
-        val out = mutableListOf<TvEpisodeInfo>()
-        for ((label, href) in parseAllLinks(page)) {
-            val hrefL = href.lowercase()
-            if (!hrefL.contains(prefix)) continue
-            val m = Regex("""s${season}e(\d+)""").find(hrefL) ?: continue
-            val ep = m.groupValues[1].toIntOrNull() ?: continue
-            if (!seen.add(ep)) continue
-            out += TvEpisodeInfo(season, ep, stripTags(label).ifBlank { "Episode $ep" })
-        }
-        return out.sortedBy { it.episode }
+    private fun findEpisodeHref(page: String, season: Int, episode: Int): String? {
+        val epPattern = Regex("""s${season}e0*$episode(?!\d)""", RegexOption.IGNORE_CASE)
+        return parseAllLinks(page).firstOrNull { epPattern.containsMatchIn(it.second) }?.second
     }
 
     private fun collectHosters(page: String, referer: String): List<HosterLink> {
@@ -99,9 +112,9 @@ internal class LevidiaResolver(
         if (hosts.isEmpty()) hosts = parseSpansContaining(page, listOf("xxx1"))
         var links = parseLinks(page, "xxx xflv")
         if (links.isEmpty()) {
-            links = parseBlankTargetLinks(page)
+            links = parseBlankTargetLinks(page).filter { it.contains("go.php", ignoreCase = true) }
         }
-        val cookieHeader = cookieHeader(page, referer)
+        val cookieHeader = cookieHeader(page)
         val out = mutableListOf<HosterLink>()
         for ((index, link) in links.withIndex()) {
             val host = hosts.getOrNull(index) ?: "levidia"
@@ -112,14 +125,8 @@ internal class LevidiaResolver(
         return out
     }
 
-    private fun cookieHeader(pageHtml: String, referer: String): String {
-        val cookies = linkedMapOf<String, String>()
-        base.toHttpUrlOrNull()?.let { client.cookieJar.loadForRequest(it) }
-            .orEmpty()
-            .forEach { cookies[it.name] = it.value }
-        referer.toHttpUrlOrNull()?.let { client.cookieJar.loadForRequest(it) }
-            .orEmpty()
-            .forEach { cookies[it.name] = it.value }
+    private fun cookieHeader(pageHtml: String): String {
+        val cookies = LinkedHashMap(sessionCookies)
         Regex("""_3chk\(['"](.+?)['"],['"](.+?)['"]\)""")
             .find(pageHtml)
             ?.let { cookies[it.groupValues[1]] = it.groupValues[2] }
@@ -131,6 +138,7 @@ internal class LevidiaResolver(
         val req = Request.Builder()
             .url(goUrl)
             .header("User-Agent", ua)
+            .header("Accept", "text/html,application/xhtml+xml")
             .header("Referer", referer)
             .apply { if (cookieHeader.isNotBlank()) header("Cookie", cookieHeader) }
             .get()
@@ -142,30 +150,76 @@ internal class LevidiaResolver(
             .newCall(req)
             .execute()
             .use { resp ->
-            if (resp.code in REDIRECTS) {
-                val loc = resp.header("Location") ?: return null
-                return WootlyResolver.normalizeUrl(if (loc.startsWith("//")) "https:$loc" else loc)
+                captureCookies(resp)
+                if (resp.code in REDIRECTS) {
+                    val loc = resp.header("Location") ?: return null
+                    return WootlyResolver.normalizeUrl(if (loc.startsWith("//")) "https:$loc" else loc)
+                }
+                val final = resp.request.url.toString()
+                if (final.contains("go.php")) return null
+                return WootlyResolver.normalizeUrl(final)
             }
-            val final = resp.request.url.toString()
-            if (final.contains("go.php")) return null
-            return WootlyResolver.normalizeUrl(final)
-        }
     }
 
     private fun get(url: String, referer: String = base): String {
-        val req = Request.Builder().url(url).header("User-Agent", ua).header("Referer", referer).get().build()
-        client.newCall(req).execute().use { return it.body?.string().orEmpty() }
-    }
-
-    private fun post(url: String): String {
         val req = Request.Builder()
             .url(url)
             .header("User-Agent", ua)
-            .header("Referer", base)
-            .post(okhttp3.RequestBody.create(null, ByteArray(0)))
+            .header("Accept", "text/html,application/xhtml+xml")
+            .header("Referer", referer)
+            .apply {
+                val cookie = sessionCookieHeader()
+                if (cookie.isNotBlank()) header("Cookie", cookie)
+            }
+            .get()
             .build()
-        client.newCall(req).execute().use { return it.body?.string().orEmpty() }
+        client.newCall(req).execute().use { resp ->
+            captureCookies(resp)
+            return resp.body?.string().orEmpty()
+        }
     }
+
+    private fun post(url: String): String {
+        val body = ByteArray(0).toRequestBody("application/x-www-form-urlencoded".toMediaTypeOrNull())
+        val req = Request.Builder()
+            .url(url)
+            .header("User-Agent", ua)
+            .header("Accept", "text/html,application/xhtml+xml")
+            .header("Referer", base)
+            .apply {
+                val cookie = sessionCookieHeader()
+                if (cookie.isNotBlank()) header("Cookie", cookie)
+            }
+            .post(body)
+            .build()
+        client.newCall(req).execute().use { resp ->
+            captureCookies(resp)
+            return resp.body?.string().orEmpty()
+        }
+    }
+
+    private fun sessionCookieHeader(): String =
+        sessionCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
+
+    private fun captureCookies(resp: Response) {
+        fun ingest(raw: String) {
+            val pair = raw.substringBefore(';')
+            val name = pair.substringBefore('=').trim()
+            val value = pair.substringAfter('=', missingDelimiterValue = "").trim()
+            if (name.isNotEmpty() && value.isNotEmpty()) {
+                sessionCookies[name] = value
+            }
+        }
+        for (raw in resp.headers("Set-Cookie")) ingest(raw)
+        var prior = resp.priorResponse
+        while (prior != null) {
+            for (raw in prior.headers("Set-Cookie")) ingest(raw)
+            prior = prior.priorResponse
+        }
+    }
+
+    /** Test/debug helper. */
+    internal fun debugSessionCookieNames(): Set<String> = sessionCookies.keys.toSet()
 
     private fun abs(href: String): String =
         if (href.startsWith("http")) href else "$base/${href.trimStart('/')}"
@@ -176,20 +230,8 @@ internal class LevidiaResolver(
         private val REDIRECTS = 300..399
 
         fun newClient(): OkHttpClient {
-            val store = mutableMapOf<String, List<Cookie>>()
-            val jar = object : CookieJar {
-                override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                    val merged = store.getOrDefault(url.host, emptyList())
-                        .associateBy { it.name }
-                        .toMutableMap()
-                    cookies.forEach { merged[it.name] = it }
-                    store[url.host] = merged.values.toList()
-                }
-
-                override fun loadForRequest(url: HttpUrl): List<Cookie> = store[url.host].orEmpty()
-            }
             return OkHttpClient.Builder()
-                .cookieJar(jar)
+                .cookieJar(CookieJar.NO_COOKIES)
                 .connectTimeout(30, TimeUnit.SECONDS)
                 .readTimeout(90, TimeUnit.SECONDS)
                 .followRedirects(true)
