@@ -32,6 +32,21 @@ class StreamResolver(
         levidia.listEpisodes(title, year, season)
     }
 
+    /** Probe seasons 1..max until an empty season is found (or max reached). */
+    suspend fun listAvailableSeasons(
+        title: String,
+        year: Int?,
+        maxSeason: Int = 12,
+    ): List<Int> = withContext(Dispatchers.IO) {
+        val seasons = mutableListOf<Int>()
+        for (s in 1..maxSeason) {
+            val eps = levidia.listEpisodes(title, year, s)
+            if (eps.isEmpty()) break
+            seasons += s
+        }
+        seasons
+    }
+
     suspend fun resolve(
         imdbId: String,
         title: String,
@@ -61,10 +76,19 @@ class StreamResolver(
     ): List<StreamPayload> {
         val hosters = levidia.scrape(title, year, mediaType, season, episode)
         if (hosters.isEmpty()) {
-            throw IllegalStateException("No streams found for $title")
+            throw IllegalStateException(
+                if (mediaType.equals("tv", ignoreCase = true)) {
+                    "No episode page / hosters for $title S${season}E$episode"
+                } else {
+                    "No streams found for $title"
+                },
+            )
         }
-        for (hoster in hosters) {
-            if (!hoster.url.contains("wootly", ignoreCase = true)) continue
+        val wootlyHosters = hosters.filter { it.url.contains("wootly", ignoreCase = true) }
+        if (wootlyHosters.isEmpty()) {
+            throw IllegalStateException("No Wootly hosters for $title")
+        }
+        for (hoster in wootlyHosters) {
             val resolved = wootly.resolve(hoster.url) ?: continue
             return listOf(
                 StreamPayload(
@@ -77,6 +101,6 @@ class StreamResolver(
                 ),
             )
         }
-        throw IllegalStateException("No playable stream found (try another episode)")
+        throw IllegalStateException("Wootly resolve failed for $title (tried ${wootlyHosters.size})")
     }
 }

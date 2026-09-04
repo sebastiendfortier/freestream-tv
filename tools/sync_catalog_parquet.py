@@ -34,10 +34,13 @@ REQUIRED = {
 
 def map_status(raw: str | None) -> str:
     text = (raw or "").lower()
-    if "returning" in text or "production" in text:
+    if any(token in text for token in ("returning", "in production", "post production", "pilot")):
         return "airing"
+    if any(token in text for token in ("upcoming", "planned", "rumored")):
+        return "upcoming"
+    if any(token in text for token in ("ended", "canceled", "cancelled", "released")):
+        return "aired"
     return "aired"
-
 
 def export_mobile_json(df: pl.DataFrame) -> None:
     records = []

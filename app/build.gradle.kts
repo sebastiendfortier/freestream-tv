@@ -14,8 +14,8 @@ android {
         applicationId = "com.freestream"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.3.5"
+        versionCode = 9
+        versionName = "0.3.6"
 
         ndk {
             abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64"))

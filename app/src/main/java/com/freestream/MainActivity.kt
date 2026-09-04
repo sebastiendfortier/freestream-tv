@@ -56,6 +56,7 @@ class MainActivity : ComponentActivity() {
                             MediaPlayDialog(
                                 item = item,
                                 streamResolver = streamResolver,
+                                repository = repository,
                                 onDismiss = { selectedItem = null },
                                 onSelectTag = { tag ->
                                     selectedItem = null

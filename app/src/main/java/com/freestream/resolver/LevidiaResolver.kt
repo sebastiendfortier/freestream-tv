@@ -52,8 +52,8 @@ internal class LevidiaResolver(
         var page = get(pageUrl, referer = base)
         var referer = pageUrl
         if (mediaType.equals("tv", ignoreCase = true) && season != null && episode != null) {
-            val seaepi = "s${season}e$episode"
-            val epHref = parseAllLinks(page).firstOrNull { it.second.lowercase().contains(seaepi) }?.second
+            val epPattern = Regex("""s${season}e$episode(?!\d)""", RegexOption.IGNORE_CASE)
+            val epHref = parseAllLinks(page).firstOrNull { epPattern.containsMatchIn(it.second) }?.second
                 ?: return emptyList()
             referer = abs(epHref)
             page = get(referer, referer = pageUrl)

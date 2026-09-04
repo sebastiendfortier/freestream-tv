@@ -177,7 +177,7 @@ class CatalogRepository(private val context: Context) {
         private const val PREFS_NAME = "freestream_catalog"
         private const val PREF_ASSET_VERSION = "catalog_asset_version"
         private const val PREF_ASSET_GZIP = "catalog_asset_gzip"
-        private const val CATALOG_ASSET_VERSION = 2
+        private const val CATALOG_ASSET_VERSION = 3
         private const val ASSET_GZ = "titles_catalog.json.gz"
         private const val ASSET_JSON = "titles_catalog.json"
         private const val CATALOG_FILE_NAME = "titles_catalog.cache"
