@@ -20,6 +20,9 @@ internal class LevidiaResolver(
 
     data class HosterLink(val provider: String, val url: String)
 
+    private var cachedSeriesKey: String? = null
+    private var cachedSeriesUrl: String? = null
+
     fun scrape(
         title: String,
         year: Int?,
@@ -30,8 +33,15 @@ internal class LevidiaResolver(
     ): List<HosterLink> = synchronized(lock) {
         sessionCookies.clear()
         get("$base/")
-        val matchUrl = findSeriesUrl(title, year) ?: return emptyList()
 
+        // Prefer direct episode URL from the list — avoid a second search flake.
+        if (!episodeUrl.isNullOrBlank()) {
+            val referer = abs(episodeUrl)
+            val page = get(referer, referer = base)
+            return collectHosters(page, referer)
+        }
+
+        val matchUrl = seriesUrl(title, year) ?: return emptyList()
         var pageUrl = matchUrl
         if (mediaType.equals("tv", ignoreCase = true) && season != null) {
             pageUrl = "$matchUrl&s=$season"
@@ -39,10 +49,7 @@ internal class LevidiaResolver(
 
         val referer: String
         val page: String
-        if (!episodeUrl.isNullOrBlank()) {
-            referer = abs(episodeUrl)
-            page = get(referer, referer = pageUrl)
-        } else if (mediaType.equals("tv", ignoreCase = true) && season != null && episode != null) {
+        if (mediaType.equals("tv", ignoreCase = true) && season != null && episode != null) {
             val seasonPage = get(pageUrl, referer = base)
             val epHref = findEpisodeHref(seasonPage, season, episode) ?: return emptyList()
             referer = abs(epHref)
@@ -58,7 +65,7 @@ internal class LevidiaResolver(
     fun listEpisodes(title: String, year: Int?, season: Int): List<TvEpisodeInfo> = synchronized(lock) {
         sessionCookies.clear()
         get("$base/")
-        val matchUrl = findSeriesUrl(title, year) ?: return emptyList()
+        val matchUrl = seriesUrl(title, year) ?: return emptyList()
         val page = get("$matchUrl&s=$season", referer = base)
         val prefix = "s${season}e"
         val seen = mutableSetOf<Int>()
@@ -79,12 +86,24 @@ internal class LevidiaResolver(
         return out.sortedBy { it.episode }
     }
 
+    private fun seriesUrl(title: String, year: Int?): String? {
+        val key = "${cleanTitle(title)}|${year ?: ""}"
+        if (cachedSeriesKey == key && !cachedSeriesUrl.isNullOrBlank()) {
+            return cachedSeriesUrl
+        }
+        val found = findSeriesUrl(title, year)
+        cachedSeriesKey = key
+        cachedSeriesUrl = found
+        return found
+    }
+
     private fun findSeriesUrl(title: String, year: Int?): String? {
         val titleKey = cleanTitle(title)
         val queries = buildList {
             add(title)
             if (year != null) add("$title $year")
         }
+        var exactIgnoreYear: String? = null
         for (query in queries) {
             val searchHtml = post("$base/search.php?q=${enc(query)}")
             if (searchHtml.contains("about 0 results", ignoreCase = true)) continue
@@ -98,11 +117,17 @@ internal class LevidiaResolver(
                 if (cleaned != titleKey && !cleaned.contains(titleKey) && !titleKey.contains(cleaned)) {
                     continue
                 }
-                if (year != null && years.none { it == year.toString() }) continue
-                return abs(href)
+                val url = abs(href)
+                if (year == null || years.any { it == year.toString() }) {
+                    return url
+                }
+                if (cleaned == titleKey && exactIgnoreYear == null) {
+                    exactIgnoreYear = url
+                }
             }
         }
-        return null
+        // Catalog year can drift from Levidia's listed year (returning series).
+        return exactIgnoreYear
     }
 
     private fun findEpisodeHref(page: String, season: Int, episode: Int): String? {

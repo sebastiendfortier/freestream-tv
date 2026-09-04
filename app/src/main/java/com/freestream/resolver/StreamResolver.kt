@@ -91,17 +91,21 @@ class StreamResolver(
             throw IllegalStateException("No Wootly hosters for $title (found ${hosters.size} other)")
         }
         for (hoster in wootlyHosters) {
-            val resolved = wootly.resolve(hoster.url) ?: continue
-            return listOf(
-                StreamPayload(
-                    streamUrl = resolved.streamUrl,
-                    quality = resolved.quality,
-                    headers = resolved.headers,
-                    provider = hoster.provider,
-                    sourceUrl = resolved.sourceUrl,
-                    contentType = resolved.contentType,
-                ),
-            )
+            repeat(2) {
+                val resolved = runCatching { wootly.resolve(hoster.url) }.getOrNull()
+                if (resolved != null) {
+                    return listOf(
+                        StreamPayload(
+                            streamUrl = resolved.streamUrl,
+                            quality = resolved.quality,
+                            headers = resolved.headers,
+                            provider = hoster.provider,
+                            sourceUrl = resolved.sourceUrl,
+                            contentType = resolved.contentType,
+                        ),
+                    )
+                }
+            }
         }
         throw IllegalStateException("Wootly resolve failed for $title (tried ${wootlyHosters.size})")
     }
