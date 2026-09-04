@@ -398,7 +398,11 @@ fun MediaPlayDialog(
                             Spacer(modifier = Modifier.height(4.dp))
                             when {
                                 seasonsLoading -> Text("Loading seasons…", color = TextMuted, fontSize = 13.sp)
-                                seasons.isEmpty() -> Text("No seasons found.", color = TextMuted, fontSize = 13.sp)
+                                seasons.isEmpty() -> Text(
+                                    "Not on stream sources yet (catalog is TMDB; play needs Levidia).",
+                                    color = TextMuted,
+                                    fontSize = 13.sp,
+                                )
                                 else -> {
                                     LazyRow(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -445,7 +449,15 @@ fun MediaPlayDialog(
                                 }
                                 episodes.isEmpty() -> {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        Text("No episodes found for this season.", color = TextMuted, fontSize = 14.sp)
+                                        Text(
+                                            text = if (seasons.isEmpty()) {
+                                                "No episodes/streams available for this title right now."
+                                            } else {
+                                                "No episodes found for this season."
+                                            },
+                                            color = TextMuted,
+                                            fontSize = 14.sp,
+                                        )
                                     }
                                 }
                                 else -> {

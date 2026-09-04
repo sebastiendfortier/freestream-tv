@@ -80,26 +80,29 @@ internal class LevidiaResolver(
     }
 
     private fun findSeriesUrl(title: String, year: Int?): String? {
-        val searchHtml = post("$base/search.php?q=${enc(title)}")
-        val block = extractMainlinkBlock(searchHtml) ?: return null
-        val links = parseAllLinks(block)
         val titleKey = cleanTitle(title)
-        var matchUrl: String? = null
-        for ((label, href) in links) {
-            val years = Regex("""\((\d{4})\)""").findAll(label).map { it.groupValues[1] }.toList()
-            if (years.isEmpty()) continue
-            val name = label.replace(Regex("""\(\d{4}\)"""), "").trim()
-            val cleaned = cleanTitle(name)
-            if (cleaned == titleKey || cleaned.contains(titleKey)) {
-                if (year != null && years.first() != year.toString()) continue
-                matchUrl = abs(href)
-                break
+        val queries = buildList {
+            add(title)
+            if (year != null) add("$title $year")
+        }
+        for (query in queries) {
+            val searchHtml = post("$base/search.php?q=${enc(query)}")
+            if (searchHtml.contains("about 0 results", ignoreCase = true)) continue
+            val block = extractMainlinkBlock(searchHtml) ?: continue
+            val links = parseAllLinks(block)
+            for ((label, href) in links) {
+                val years = Regex("""\((\d{4})\)""").findAll(label).map { it.groupValues[1] }.toList()
+                if (years.isEmpty()) continue
+                val name = label.replace(Regex("""\(\d{4}\)"""), "").trim()
+                val cleaned = cleanTitle(name)
+                if (cleaned != titleKey && !cleaned.contains(titleKey) && !titleKey.contains(cleaned)) {
+                    continue
+                }
+                if (year != null && years.none { it == year.toString() }) continue
+                return abs(href)
             }
         }
-        if (matchUrl == null && links.isNotEmpty()) {
-            matchUrl = abs(links.first().second)
-        }
-        return matchUrl
+        return null
     }
 
     private fun findEpisodeHref(page: String, season: Int, episode: Int): String? {
