@@ -80,6 +80,7 @@ class TvPlayerActivity : ComponentActivity() {
         val streamTitle = intent.getStringExtra(EXTRA_TITLE) ?: "Episode"
         val referer = intent.getStringExtra(EXTRA_REFERER) ?: ""
         val userAgent = intent.getStringExtra(EXTRA_USER_AGENT) ?: "Mozilla/5.0"
+        val origin = intent.getStringExtra(EXTRA_ORIGIN) ?: ""
         val startPositionMs = intent.getLongExtra(EXTRA_START_POSITION_MS, 0L)
         val isHls = streamUrl.contains(".m3u8")
 
@@ -95,7 +96,7 @@ class TvPlayerActivity : ComponentActivity() {
             currentIndex = session?.startIndex ?: 0
         }
 
-        initializePlayer(streamUrl, streamTitle, referer, userAgent, isHls, startPositionMs)
+        initializePlayer(streamUrl, streamTitle, referer, userAgent, origin, isHls, startPositionMs)
     }
 
     private fun initializePlayer(
@@ -103,17 +104,20 @@ class TvPlayerActivity : ComponentActivity() {
         title: String,
         referer: String,
         userAgent: String,
+        origin: String,
         isHls: Boolean,
         startPositionMs: Long
     ) {
+        val requestProps = mutableMapOf(
+            "User-Agent" to userAgent,
+            "Accept" to "*/*",
+        )
+        if (referer.isNotBlank()) requestProps["Referer"] = referer
+        if (origin.isNotBlank()) requestProps["Origin"] = origin
+
         val httpDataSourceFactory = DefaultHttpDataSource.Factory()
             .setUserAgent(userAgent)
-            .setDefaultRequestProperties(
-                mapOf(
-                    "Referer" to referer,
-                    "Accept" to "*/*"
-                )
-            )
+            .setDefaultRequestProperties(requestProps)
             .setAllowCrossProtocolRedirects(true)
 
         val mediaSourceFactory = DefaultMediaSourceFactory(httpDataSourceFactory)
@@ -324,6 +328,7 @@ class TvPlayerActivity : ComponentActivity() {
         const val EXTRA_TITLE = "extra_title"
         const val EXTRA_REFERER = "extra_referer"
         const val EXTRA_USER_AGENT = "extra_user_agent"
+        const val EXTRA_ORIGIN = "extra_origin"
         const val EXTRA_START_POSITION_MS = "extra_start_position_ms"
         const val EXTRA_EPISODE_URL = "extra_episode_url"
         const val EXTRA_SERIES_TITLE = "extra_series_title"
@@ -352,6 +357,7 @@ class TvPlayerActivity : ComponentActivity() {
                 putExtra(EXTRA_TITLE, title)
                 putExtra(EXTRA_REFERER, resolved.headers["Referer"] ?: "")
                 putExtra(EXTRA_USER_AGENT, resolved.headers["User-Agent"] ?: "Mozilla/5.0")
+                putExtra(EXTRA_ORIGIN, resolved.headers["Origin"] ?: "")
                 putExtra(EXTRA_START_POSITION_MS, startPositionMs)
                 putExtra(EXTRA_EPISODE_URL, episodeUrl)
                 putExtra(EXTRA_SERIES_TITLE, seriesTitle)

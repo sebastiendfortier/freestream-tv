@@ -33,13 +33,22 @@ internal class WootlyResolver(
             val postBody = client.newCall(postReq).execute().use { it.body?.string().orEmpty() }
             val tk = Regex("""tk\s*=\s*["']([^"']+)""").find(postBody)?.groupValues?.get(1) ?: return null
             val vd = Regex("""vd\s*=\s*["']([^"']+)""").find(postBody)?.groupValues?.get(1) ?: return null
-            val grabBase = embedUrl.substringBeforeLast("/") + "/grabm"
+            // Match Python urljoin(embed, "/grabm") → https://host/grabm (site root), not nested path.
+            val embedParsed = embedUrl.toHttpUrlOrNull() ?: return null
+            val grabBase = embedParsed.newBuilder()
+                .encodedPath("/grabm")
+                .query(null)
+                .fragment(null)
+                .build()
+                .toString()
+                .trimEnd('/')
             val grabUrl = "$grabBase?t=${enc(tk)}&id=${enc(vd)}"
+            val grabReferer = "https://${pageUrl.host}/"
             val grabBody = client.newCall(
                 Request.Builder()
                     .url(grabUrl)
                     .header("User-Agent", ua)
-                    .header("Referer", webUrl)
+                    .header("Referer", grabReferer)
                     .get()
                     .build(),
             ).execute().use { it.body?.string().orEmpty().trim() }
